@@ -1,0 +1,138 @@
+﻿<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Lab05 — Kanban</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px
+        }
+
+        .board {
+            display: flex;
+            gap: 16px
+        }
+
+        .col {
+            flex: 1;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 12px
+        }
+
+        .card {
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 8px;
+            margin: 8px 0
+        }
+
+        button, input {
+            padding: 8px;
+            width: 100%;
+            box-sizing: border-box;
+            margin: 6px 0
+        }
+
+        .small {
+            font-size: 12px;
+            opacity: .75
+        }
+
+        .ok {
+            color: green
+        }
+
+        .err {
+            color: #b00020
+        }
+    </style>
+</head>
+<body>
+    <h1>Lab05 — Kanban</h1>
+    <p id="msg"></p>
+
+    <div style="max-width:420px">
+        <h3>Dodaj zadanie (do Todo)</h3>
+        <input id="title" placeholder="Tytuł zadania" />
+        <button onclick="addTask()">Dodaj</button>
+        <button onclick="load()">Odśwież</button>
+    </div>
+
+    <div class="board" id="board"></div>
+
+    <script>const msg=(t,ok=true)=>{const el=document.getElementById('msg');el.className=ok?'ok':'err';el.textContent=t;}
+async function api(url, method='GET', body=null){
+  const res=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):null});
+  const text=await res.text(); let data=null; try{data=text?JSON.parse(text):null}catch{}
+  if(!res.ok) throw new Error(data?.error||data?.title||text||('HTTP '+res.status));
+  return data;
+}
+
+let colsByOrd = [];
+
+function nextColId(colId){
+  const idx = colsByOrd.findIndex(c=>c.id===colId);
+  if(idx < 0 || idx === colsByOrd.length-1) return null;
+  return colsByOrd[idx+1].id;
+}
+
+async function load(){
+  try{
+    const board = await api('/api/board');
+    colsByOrd = [...board.cols].sort((a,b)=>a.ord-b.ord);
+    const tasks = [...board.tasks].sort((a,b)=>a.colId-b.colId || a.ord-b.ord);
+
+    const html = colsByOrd.map(c=>{
+      const list = tasks.filter(t=>t.colId===c.id).sort((a,b)=>a.ord-b.ord);
+      return `
+        <div class="col">
+          <h2>${c.name}</h2>
+          <div class="small">col_id=${c.id}</div>
+          ${list.map(t=>{
+            const right = nextColId(t.colId);
+            return `
+              <div class="card">
+                <div><b>${t.title}</b></div>
+                <div class="small">task_id=${t.id} • ord=${t.ord}</div>
+                ${right ? `<button onclick="moveRight(${t.id}, ${t.colId})">Przenieś w prawo →</button>` : `<div class="small">Done</div>`}
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `;
+    }).join('');
+
+    document.getElementById('board').innerHTML = html;
+  }catch(e){msg(e.message,false);}
+}
+
+async function addTask(){
+  try{
+    const title = document.getElementById('title').value.trim();
+    if(!title){ msg('Podaj tytuł', false); return; }
+    const board = await api('/api/board');
+    const todo = [...board.cols].sort((a,b)=>a.ord-b.ord)[0];
+    await api('/api/tasks','POST',{title, col_id: todo.id});
+    document.getElementById('title').value='';
+    msg('Dodano');
+    await load();
+  }catch(e){msg(e.message,false);}
+}
+
+async function moveRight(taskId, currentColId){
+  try{
+    const toCol = nextColId(currentColId);
+    if(!toCol) return;
+    const board = await api('/api/board');
+    const maxOrd = Math.max(0, ...board.tasks.filter(t=>t.colId===toCol).map(t=>t.ord));
+    await api(`/api/tasks/${taskId}/move`,'POST',{col_id: toCol, ord: maxOrd+1});
+    msg('Przeniesiono');
+    await load();
+  }catch(e){msg(e.message,false);}
+}
+
+load();</script>
+</body>
+</html>

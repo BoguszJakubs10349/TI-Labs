@@ -1,0 +1,6 @@
+@Notatki__tagi_i_wyszukiwanie_HostAddress = http://localhost:5159
+
+GET {{Notatki__tagi_i_wyszukiwanie_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
