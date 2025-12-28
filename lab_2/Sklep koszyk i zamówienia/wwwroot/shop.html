@@ -1,0 +1,132 @@
+﻿<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Lab02 — Sklep</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 8px;
+        }
+
+        th {
+            background: #f2f2f2;
+        }
+
+        button {
+            padding: 6px 10px;
+        }
+
+        .ok {
+            color: green;
+        }
+
+        .err {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Lab02 — Sklep</h1>
+    <p id="msg"></p>
+
+    <h2>Produkty</h2>
+    <button onclick="loadProducts()">Odśwież produkty</button>
+    <div id="products"></div>
+
+    <h2>Koszyk</h2>
+    <button onclick="loadCart()">Odśwież koszyk</button>
+    <div id="cart"></div>
+
+    <button onclick="checkout()">Zamów (checkout)</button>
+
+    <script>
+        const msg = (t, ok = true) => {
+            const el = document.getElementById('msg');
+            el.className = ok ? 'ok' : 'err';
+            el.textContent = t;
+        };
+
+        async function api(url, method = 'GET', body = null) {
+            const res = await fetch(url, {
+                method,
+                headers: body ? { 'Content-Type': 'application/json' } : {},
+                body: body ? JSON.stringify(body) : null
+            });
+            const text = await res.text();
+            let data = null;
+            try { data = text ? JSON.parse(text) : null; } catch { }
+            if (!res.ok) throw new Error(data?.error || text || res.status);
+            return data;
+        }
+
+        async function loadProducts() {
+            const list = await api('/api/products');
+            let html = '<table><tr><th>ID</th><th>Nazwa</th><th>Cena</th><th></th></tr>';
+            for (const p of list) {
+                html += `
+          <tr>
+            <td>${p.id}</td>
+            <td>${p.name}</td>
+            <td>${p.price.toFixed(2)}</td>
+            <td>
+              <button onclick="addToCart(${p.id})">Dodaj do koszyka</button>
+            </td>
+          </tr>`;
+            }
+            html += '</table>';
+            document.getElementById('products').innerHTML = html;
+        }
+
+        async function addToCart(id) {
+            await api('/api/cart/add', 'POST', { product_id: id, qty: 1 });
+            msg('Dodano do koszyka');
+            loadCart();
+        }
+
+        async function loadCart() {
+            const cart = await api('/api/cart');
+            if (!cart.items.length) {
+                document.getElementById('cart').innerHTML = '<p>Koszyk pusty</p>';
+                return;
+            }
+
+            let html = '<table><tr><th>Produkt</th><th>Cena</th><th>Ilość</th><th>Suma</th></tr>';
+            for (const i of cart.items) {
+                html += `
+          <tr>
+            <td>${i.name}</td>
+            <td>${i.price.toFixed(2)}</td>
+            <td>${i.qty}</td>
+            <td>${i.lineTotal.toFixed(2)}</td>
+          </tr>`;
+            }
+            html += `<tr><th colspan="3">Razem</th><th>${cart.total.toFixed(2)}</th></tr>`;
+            html += '</table>';
+            document.getElementById('cart').innerHTML = html;
+        }
+
+        async function checkout() {
+            const res = await api('/api/checkout', 'POST');
+            msg(`Zamówienie OK (ID=${res.order_Id}, suma=${res.total.toFixed(2)})`);
+            loadCart();
+        }
+
+        loadProducts();
+        loadCart();
+    </script>
+
+</body>
+</html>
