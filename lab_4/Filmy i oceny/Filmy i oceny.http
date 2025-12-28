@@ -1,0 +1,6 @@
+@Filmy_i_oceny_HostAddress = http://localhost:5173
+
+GET {{Filmy_i_oceny_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

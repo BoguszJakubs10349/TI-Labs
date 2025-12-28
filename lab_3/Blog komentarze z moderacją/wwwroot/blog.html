@@ -1,0 +1,169 @@
+﻿<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Lab03 — Blog</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px
+        }
+
+        .row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 12px;
+            min-width: 360px
+        }
+
+        input, textarea, button {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            box-sizing: border-box
+        }
+
+        textarea {
+            min-height: 90px
+        }
+
+        .ok {
+            color: green
+        }
+
+        .err {
+            color: #b00020
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse
+        }
+
+        th, td {
+            border-bottom: 1px solid #eee;
+            padding: 8px;
+            text-align: left
+        }
+    </style>
+</head>
+<body>
+    <h1>Lab03 — Blog (komentarze z moderacją)</h1>
+    <p id="msg"></p>
+
+    <div class="row">
+        <div class="card">
+            <h3>Dodaj post</h3>
+            <input id="pt" placeholder="Tytuł" />
+            <textarea id="pb" placeholder="Treść"></textarea>
+            <button onclick="addPost()">Dodaj post</button>
+            <button onclick="loadPosts()">Odśwież posty</button>
+        </div>
+
+        <div class="card">
+            <h3>Moderator — oczekujące komentarze</h3>
+            <button onclick="loadPending()">Odśwież</button>
+            <div id="pending"></div>
+        </div>
+    </div>
+
+    <h2>Posty</h2>
+    <div id="posts"></div>
+
+    <script>const msg = (t, ok=true)=>{const el=document.getElementById('msg');el.className=ok?'ok':'err';el.textContent=t;}
+
+async function api(url, method='GET', body=null){
+  const res = await fetch(url, { method, headers: body?{'Content-Type':'application/json'}:{}, body: body?JSON.stringify(body):null });
+  const text = await res.text();
+  let data=null; try{data=text?JSON.parse(text):null}catch{}
+  if(!res.ok) throw new Error(data?.error || data?.title || text || ('HTTP '+res.status));
+  return data;
+}
+
+async function loadPosts(){
+  const list = await api('/api/posts');
+  document.getElementById('posts').innerHTML = `
+    <table>
+      <thead><tr><th>Id</th><th>Tytuł</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(p=>`
+          <tr>
+            <td>${p.id}</td>
+            <td>${p.title}</td>
+            <td><button onclick="showComments(${p.id})">Komentarze</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+    <div id="commentsBox"></div>
+  `;
+}
+
+async function addPost(){
+  try{
+    await api('/api/posts','POST',{title:document.getElementById('pt').value, body:document.getElementById('pb').value});
+    msg('Dodano post');
+    document.getElementById('pt').value=''; document.getElementById('pb').value='';
+    await loadPosts();
+  }catch(e){msg(e.message,false);}
+}
+
+async function showComments(postId){
+  const approved = await api(`/api/posts/${postId}/comments`);
+  const box = document.getElementById('commentsBox');
+  box.innerHTML = `
+    <h3>Komentarze (publiczne, tylko approved=1) — Post #${postId}</h3>
+    ${approved.length? `<ul>${approved.map(c=>`<li><b>${c.author}</b>: ${c.body}</li>`).join('')}</ul>` : '<p>Brak zatwierdzonych komentarzy.</p>'}
+    <h4>Dodaj komentarz (domyślnie approved=0)</h4>
+    <input id="ca" placeholder="Autor" />
+    <textarea id="cb" placeholder="Treść komentarza"></textarea>
+    <button onclick="addComment(${postId})">Wyślij komentarz</button>
+  `;
+}
+
+async function addComment(postId){
+  try{
+    await api(`/api/posts/${postId}/comments`,'POST',{author:document.getElementById('ca').value, body:document.getElementById('cb').value});
+    msg('Dodano komentarz (czeka na moderację)');
+    document.getElementById('ca').value=''; document.getElementById('cb').value='';
+    await showComments(postId);
+    await loadPending();
+  }catch(e){msg(e.message,false);}
+}
+
+async function loadPending(){
+  const list = await api('/api/comments/pending');
+  document.getElementById('pending').innerHTML = list.length ? `
+    <table>
+      <thead><tr><th>Id</th><th>Post</th><th>Autor</th><th>Treść</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(c=>`
+          <tr>
+            <td>${c.id}</td>
+            <td>${c.postId}</td>
+            <td>${c.author}</td>
+            <td>${c.body}</td>
+            <td><button onclick="approve(${c.id})">Zatwierdź</button></td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  ` : '<p>Brak oczekujących komentarzy.</p>';
+}
+
+async function approve(id){
+  try{
+    await api(`/api/comments/${id}/approve`,'POST');
+    msg('Zatwierdzono');
+    await loadPending();
+  }catch(e){msg(e.message,false);}
+}
+
+loadPosts();
+loadPending();</script>
+</body>
+</html>

@@ -1,0 +1,125 @@
+﻿<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <title>Lab04 — Movies</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px
+        }
+
+        .row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 12px;
+            min-width: 360px
+        }
+
+        input, button {
+            width: 100%;
+            padding: 8px;
+            margin: 6px 0;
+            box-sizing: border-box
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse
+        }
+
+        th, td {
+            border-bottom: 1px solid #eee;
+            padding: 8px;
+            text-align: left
+        }
+
+        .ok {
+            color: green
+        }
+
+        .err {
+            color: #b00020
+        }
+    </style>
+</head>
+<body>
+    <h1>Lab04 — Filmy i oceny</h1>
+    <p id="msg"></p>
+
+    <div class="row">
+        <div class="card">
+            <h3>Dodaj film</h3>
+            <input id="t" placeholder="Tytuł" />
+            <input id="y" type="number" value="2024" />
+            <button onclick="addMovie()">Dodaj</button>
+        </div>
+
+        <div class="card">
+            <h3>Dodaj ocenę</h3>
+            <input id="mid" type="number" placeholder="MovieId" />
+            <input id="score" type="number" min="1" max="5" value="5" />
+            <button onclick="addRating()">Oceń</button>
+            <p style="font-size:12px;opacity:.75">Score musi być 1..5</p>
+        </div>
+    </div>
+
+    <h2>Ranking</h2>
+    <button onclick="load()">Odśwież</button>
+    <div id="list"></div>
+
+    <script>const msg=(t,ok=true)=>{const el=document.getElementById('msg');el.className=ok?'ok':'err';el.textContent=t;}
+
+async function api(url,method='GET',body=null){
+  const res=await fetch(url,{method,headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):null});
+  const text=await res.text();
+  let data=null; try{data=text?JSON.parse(text):null}catch{}
+  if(!res.ok) throw new Error(data?.error||data?.title||text||('HTTP '+res.status));
+  return data;
+}
+
+async function load(){
+  const list = await api('/api/movies');
+  document.getElementById('list').innerHTML = `
+    <table>
+      <thead><tr><th>Id</th><th>Tytuł</th><th>Rok</th><th>Avg</th><th>Votes</th></tr></thead>
+      <tbody>
+        ${list.map(m=>`
+          <tr>
+            <td>${m.id}</td>
+            <td>${m.title}</td>
+            <td>${m.year}</td>
+            <td>${Number(m.avg_Score).toFixed(2)}</td>
+            <td>${m.votes}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function addMovie(){
+  try{
+    await api('/api/movies','POST',{title:document.getElementById('t').value, year:Number(document.getElementById('y').value)});
+    msg('Dodano film');
+    document.getElementById('t').value='';
+    await load();
+  }catch(e){msg(e.message,false);}
+}
+
+async function addRating(){
+  try{
+    await api('/api/ratings','POST',{movie_id:Number(document.getElementById('mid').value), score:Number(document.getElementById('score').value)});
+    msg('Dodano ocenę');
+    await load();
+  }catch(e){msg(e.message,false);}
+}
+
+load();</script>
+</body>
+</html>

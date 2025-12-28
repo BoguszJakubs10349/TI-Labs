@@ -1,0 +1,6 @@
+@Blog_komentarze_z_moderacją_HostAddress = http://localhost:5296
+
+GET {{Blog_komentarze_z_moderacją_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
