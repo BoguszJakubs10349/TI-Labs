@@ -1,0 +1,195 @@
+﻿<!doctype html>
+<html lang="pl">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Lab01 — Wypożyczalnia</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        .row {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 12px;
+            min-width: 320px;
+        }
+
+        input, button {
+            padding: 8px;
+            margin: 4px 0;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            border-bottom: 1px solid #eee;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .err {
+            color: #b00020;
+        }
+
+        .ok {
+            color: #0a7a0a;
+        }
+    </style>
+</head>
+<body>
+    <h1>Lab01 — Wypożyczalnia książek</h1>
+    <p id="msg"></p>
+
+    <div class="row">
+        <div class="card">
+            <h3>Dodaj członka</h3>
+            <input id="mName" placeholder="Imię i nazwisko" />
+            <input id="mEmail" placeholder="Email" />
+            <button onclick="addMember()">Dodaj</button>
+        </div>
+
+        <div class="card">
+            <h3>Dodaj książkę</h3>
+            <input id="bTitle" placeholder="Tytuł" />
+            <input id="bAuthor" placeholder="Autor" />
+            <input id="bCopies" type="number" min="0" value="1" />
+            <button onclick="addBook()">Dodaj</button>
+        </div>
+
+        <div class="card">
+            <h3>Wypożycz</h3>
+            <input id="borrowMemberId" type="number" min="1" placeholder="MemberId" />
+            <input id="borrowBookId" type="number" min="1" placeholder="BookId" />
+            <input id="borrowDays" type="number" min="1" value="14" />
+            <button onclick="borrow()">Wypożycz</button>
+        </div>
+    </div>
+
+    <h2>Książki</h2>
+    <button onclick="loadBooks()">Odśwież książki</button>
+    <div id="books"></div>
+
+    <h2>Wypożyczenia</h2>
+    <button onclick="loadLoans()">Odśwież wypożyczenia</button>
+    <div id="loans"></div>
+
+    <script>const msg = (t, ok=true) => {
+  const el = document.getElementById('msg');
+  el.className = ok ? 'ok' : 'err';
+  el.textContent = t;
+};
+
+async function api(url, method='GET', body=null) {
+  const res = await fetch(url, {
+    method,
+    headers: body ? {'Content-Type':'application/json'} : {},
+    body: body ? JSON.stringify(body) : null
+  });
+
+  let data = null;
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) data = await res.json();
+
+  if (!res.ok) {
+    const err = (data && (data.error || data.title)) ? (data.error || data.title) : ('HTTP ' + res.status);
+    throw new Error(err);
+  }
+  return data;
+}
+
+async function addMember() {
+  try {
+    const name = document.getElementById('mName').value;
+    const email = document.getElementById('mEmail').value;
+    await api('/api/members', 'POST', { name, email });
+    msg('Dodano członka');
+  } catch (e) { msg(e.message, false); }
+}
+
+async function addBook() {
+  try {
+    const title = document.getElementById('bTitle').value;
+    const author = document.getElementById('bAuthor').value;
+    const copies = Number(document.getElementById('bCopies').value);
+    await api('/api/books', 'POST', { title, author, copies });
+    msg('Dodano książkę');
+    await loadBooks();
+  } catch (e) { msg(e.message, false); }
+}
+
+async function borrow() {
+  try {
+    const member_id = Number(document.getElementById('borrowMemberId').value);
+    const book_id = Number(document.getElementById('borrowBookId').value);
+    const days = Number(document.getElementById('borrowDays').value);
+    await api('/api/loans/borrow', 'POST', { member_id, book_id, days });
+    msg('Wypożyczono');
+    await loadBooks();
+    await loadLoans();
+  } catch (e) { msg(e.message, false); }
+}
+
+async function returnLoan(id) {
+  try {
+    await api('/api/loans/return', 'POST', { loan_id: id });
+    msg('Zwrócono');
+    await loadBooks();
+    await loadLoans();
+  } catch (e) { msg(e.message, false); }
+}
+
+async function loadBooks() {
+  const list = await api('/api/books');
+  const html = `
+    <table>
+      <thead><tr><th>Id</th><th>Tytuł</th><th>Autor</th><th>Copies</th><th>Available</th></tr></thead>
+      <tbody>
+        ${list.map(b => `
+          <tr>
+            <td>${b.id}</td><td>${b.title}</td><td>${b.author}</td>
+            <td>${b.copies}</td><td>${b.available}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.getElementById('books').innerHTML = html;
+}
+
+async function loadLoans() {
+  const list = await api('/api/loans');
+  const html = `
+    <table>
+      <thead><tr><th>Id</th><th>Czytelnik</th><th>Książka</th><th>Loan</th><th>Due</th><th>Return</th><th></th></tr></thead>
+      <tbody>
+        ${list.map(l => `
+          <tr>
+            <td>${l.id}</td>
+            <td>${l.memberName} (#${l.memberId})</td>
+            <td>${l.bookTitle} (#${l.bookId})</td>
+            <td>${new Date(l.loanDate).toISOString().slice(0,19).replace('T',' ')}</td>
+            <td>${new Date(l.dueDate).toISOString().slice(0,19).replace('T',' ')}</td>
+            <td>${l.returnDate ? new Date(l.returnDate).toISOString().slice(0,19).replace('T',' ') : '-'}</td>
+            <td>${l.returnDate ? '' : `<button onclick="returnLoan(${l.id})">Zwrot</button>`}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+  document.getElementById('loans').innerHTML = html;
+}
+
+loadBooks();
+loadLoans();</script>
+</body>
+</html>
